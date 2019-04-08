@@ -12,14 +12,22 @@
 #include "sourcecodepro_28.h"
 #include "calibri_36.h"
 #include "arial_72.h"
-
+#define PI 3.14159265
 
 struct ili9488_opt_t g_ili9488_display_opt;
 /************************************************************************/
 /* variaveis globais                                                    */
 
-int quantidades_de_rotacoes=1;
-char buffer[32];
+int quantidades_de_rotacoes=-1;
+int hora,minutos,segundos;
+int velocidade,velocidade_angular;
+float distancia;
+double raio=0.325;
+char buffer_rotacoes[32];
+char buffer_tempo_total[32];
+char buffer_distancia[32];
+
+
 volatile Bool f_rtt_alarme = false;
 /************************************************************************/
 /* prototypes                                                           */
@@ -48,7 +56,7 @@ static void RTT_init(uint16_t pllPreScale, uint32_t IrqNPulses);
 void but_callback(void)
 {
 	quantidades_de_rotacoes+=1;
-	sprintf(buffer,"%d",quantidades_de_rotacoes);
+	
 }
 void io_init(void)
 {
@@ -148,6 +156,11 @@ void RTT_Handler(void)
 		pin_toggle(LED_PIO, LED_IDX_MASK);    // BLINK Led
 		f_rtt_alarme = true;                  // flag RTT alarme
 	}
+	if(segundos==60){
+		segundos=0;
+		minutos+=1;
+	}else{segundos+=1;}
+	distancia=2*PI*quantidades_de_rotacoes*raio;
 }
 
 	/* Initialize TC */
@@ -163,22 +176,22 @@ int main(void) {
 	// Inicializa RTT com IRQ no alarme.
 	f_rtt_alarme = true;
 	
-	sprintf(buffer,"%d",quantidades_de_rotacoes);
-	font_draw_text(&sourcecodepro_28, "OIMUNDO", 50, 50, 1);
-	font_draw_text(&calibri_36, "Oi Mundo! #$!@", 50, 100, 1);
-	font_draw_text(&arial_72, buffer, 50, 200, 2);
+	
+
 
 	while(1) {
 		if (f_rtt_alarme){
       uint16_t pllPreScale = (int) (((float) 32768) / 2.0);
-      uint32_t irqRTTvalue  = 4;
+      uint32_t irqRTTvalue  = 2;
       
       // reinicia RTT para gerar um novo IRQ
       RTT_init(pllPreScale, irqRTTvalue);         
-      sprintf(buffer,"%d",quantidades_de_rotacoes);
-      font_draw_text(&sourcecodepro_28, "OIMUNDO", 50, 50, 1);
-      font_draw_text(&calibri_36, "Oi Mundo! #$!@", 50, 100, 1);
-      font_draw_text(&arial_72, buffer, 50, 200, 2);
+      sprintf(buffer_rotacoes,"%d",quantidades_de_rotacoes);
+	  sprintf(buffer_tempo_total,"00:%d:%d",minutos,segundos);
+	  sprintf(buffer_distancia,"m : %lf",distancia);
+	  font_draw_text(&calibri_36, buffer_distancia, 50, 50, 1);
+      font_draw_text(&calibri_36, buffer_tempo_total, 50, 100, 1);
+      font_draw_text(&calibri_36, buffer_rotacoes, 50, 200, 2);
      /*
       * caso queira ler o valor atual do RTT, basta usar a funcao
       *   rtt_read_timer_value()
