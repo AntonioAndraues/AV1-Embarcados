@@ -18,14 +18,18 @@ struct ili9488_opt_t g_ili9488_display_opt;
 /************************************************************************/
 /* variaveis globais                                                    */
 
-int quantidades_de_rotacoes=-1;
+int quantidades_de_rotacoes=0;
 int hora,minutos,segundos;
-int velocidade,velocidade_angular;
+float velocidade,velocidade_angular;
 float distancia;
 double raio=0.325;
+int quantidades_de_rotacoes_dt=0;
 char buffer_rotacoes[32];
-char buffer_tempo_total[32];
 char buffer_distancia[32];
+char buffer_velocidade[32];
+char buffer_minutos[5];
+char buffer_segundos[5];
+char buffer_hora[5];
 
 
 volatile Bool f_rtt_alarme = false;
@@ -56,6 +60,7 @@ static void RTT_init(uint16_t pllPreScale, uint32_t IrqNPulses);
 void but_callback(void)
 {
 	quantidades_de_rotacoes+=1;
+	quantidades_de_rotacoes_dt+=1;
 	
 }
 void io_init(void)
@@ -68,16 +73,16 @@ void io_init(void)
 	// com pull-up
 	pio_configure(BUT1_PIO, PIO_INPUT, BUT1_IDX_MASK, PIO_PULLUP|PIO_DEBOUNCE);
 	pio_set_debounce_filter(BUT1_PIO,1,20);
+		// Ativa interrup??o
+	pio_enable_interrupt(BUT1_PIO, BUT1_IDX_MASK);
+	NVIC_EnableIRQ(BUT1_PIO_ID);
+	NVIC_SetPriority(BUT1_PIO_ID, 3); // Prioridade 3
 	
 	pio_handler_set(BUT1_PIO,
 	BUT1_PIO_ID,
 	BUT1_IDX_MASK,
 	PIO_IT_FALL_EDGE,
 	but_callback);
-		// Ativa interrup??o
-	pio_enable_interrupt(BUT1_PIO, BUT1_IDX_MASK);
-	NVIC_EnableIRQ(BUT1_PIO_ID);
-	NVIC_SetPriority(BUT1_PIO_ID, 3); // Prioridade 3
 }
 void pin_toggle(Pio *pio, uint32_t mask){
 	if(pio_get_output_data_status(pio, mask))
@@ -156,11 +161,28 @@ void RTT_Handler(void)
 		pin_toggle(LED_PIO, LED_IDX_MASK);    // BLINK Led
 		f_rtt_alarme = true;                  // flag RTT alarme
 	}
-	if(segundos==60){
+	//refresh da tela para retirar lixo
+	//ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
+	if(segundos>=59){
 		segundos=0;
-		minutos+=1;
+		ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
+		if(minutos>=59){
+			minutos=0;
+			ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
+			hora+=1;
+		}
+		else{minutos+=1;}
 	}else{segundos+=1;}
+	
+		//ili9488_draw_filled_rectangle(70,100, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
+	
+		
 	distancia=2*PI*quantidades_de_rotacoes*raio;
+	// DT NESSE CASO É 1
+	velocidade_angular=2*PI*quantidades_de_rotacoes_dt;
+	velocidade=velocidade_angular*raio*3.6;
+	quantidades_de_rotacoes_dt=0;
+	
 }
 
 	/* Initialize TC */
@@ -187,11 +209,18 @@ int main(void) {
       // reinicia RTT para gerar um novo IRQ
       RTT_init(pllPreScale, irqRTTvalue);         
       sprintf(buffer_rotacoes,"%d",quantidades_de_rotacoes);
-	  sprintf(buffer_tempo_total,"00:%d:%d",minutos,segundos);
+	  sprintf(buffer_minutos,"%d  :",minutos);
+	  sprintf(buffer_segundos,"%d",segundos);
+	  sprintf(buffer_hora,"%d  :",hora);
 	  sprintf(buffer_distancia,"m : %lf",distancia);
+	  sprintf(buffer_velocidade,"(KM/h) : %lf",velocidade);
+	  
+	  
 	  font_draw_text(&calibri_36, buffer_distancia, 50, 50, 1);
-      font_draw_text(&calibri_36, buffer_tempo_total, 50, 100, 1);
-      font_draw_text(&calibri_36, buffer_rotacoes, 50, 200, 2);
+      font_draw_text(&calibri_36, buffer_hora, 50, 100, 1);
+	  font_draw_text(&calibri_36, buffer_minutos, 150, 100, 1);
+	  font_draw_text(&calibri_36, buffer_segundos, 250, 100, 1);
+      font_draw_text(&calibri_36, buffer_velocidade, 0, 200, 2);
      /*
       * caso queira ler o valor atual do RTT, basta usar a funcao
       *   rtt_read_timer_value()
