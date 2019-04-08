@@ -30,6 +30,7 @@ char buffer_velocidade[32];
 char buffer_minutos[5];
 char buffer_segundos[5];
 char buffer_hora[5];
+int flagbutton=0;
 
 
 volatile Bool f_rtt_alarme = false;
@@ -63,16 +64,20 @@ void but_callback(void)
 	quantidades_de_rotacoes_dt+=1;
 	
 }
+
 void io_init(void)
 {
 	// Inicializa clock do perif?rico PIO responsavel pelo botao
 	pmc_enable_periph_clk(BUT1_PIO_ID);
+	
 	pmc_enable_periph_clk(LED_PIO_ID);
 	pio_configure(LED_PIO, PIO_OUTPUT_0, LED_IDX_MASK, PIO_DEFAULT);
 	// Configura PIO para lidar com o pino do bot?o como entrada
 	// com pull-up
 	pio_configure(BUT1_PIO, PIO_INPUT, BUT1_IDX_MASK, PIO_PULLUP|PIO_DEBOUNCE);
 	pio_set_debounce_filter(BUT1_PIO,1,20);
+	
+
 		// Ativa interrup??o
 	pio_enable_interrupt(BUT1_PIO, BUT1_IDX_MASK);
 	NVIC_EnableIRQ(BUT1_PIO_ID);
@@ -83,6 +88,7 @@ void io_init(void)
 	BUT1_IDX_MASK,
 	PIO_IT_FALL_EDGE,
 	but_callback);
+	
 }
 void pin_toggle(Pio *pio, uint32_t mask){
 	if(pio_get_output_data_status(pio, mask))
@@ -117,6 +123,46 @@ void font_draw_text(tFont *font, const char *text, int x, int y, int spacing) {
 		}
 		p++;
 	}	
+}
+void calcula_variaveis(void){
+	distancia=2*PI*quantidades_de_rotacoes*raio;
+	// DT NESSE CASO É 1
+	velocidade_angular=2*PI*quantidades_de_rotacoes_dt;
+	velocidade=velocidade_angular*raio*3.6;
+	quantidades_de_rotacoes_dt=0;
+	
+}
+void tempo_de_corrida(void){
+	//refresh da tela para retirar lixo
+	//ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
+	if(segundos>=59){
+		segundos=0;
+		ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
+		if(minutos>=59){
+			minutos=0;
+			ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
+			hora+=1;
+		}
+		else{minutos+=1;}
+		}else{segundos+=1;}
+
+}
+void escreve_lcd(void){
+	sprintf(buffer_minutos,"%d  :",minutos);
+	sprintf(buffer_segundos,"%d",segundos);
+	sprintf(buffer_hora,"%d  :",hora);
+	font_draw_text(&calibri_36, buffer_hora, 50, 100, 1);
+	font_draw_text(&calibri_36, buffer_minutos, 150, 100, 1);
+	font_draw_text(&calibri_36, buffer_segundos, 250, 100, 1);
+	sprintf(buffer_distancia,"m : %lf",distancia);
+	sprintf(buffer_velocidade,"(KM/h) : %lf",velocidade);
+	
+	
+	font_draw_text(&calibri_36, buffer_distancia, 50, 50, 1);
+	font_draw_text(&calibri_36, buffer_velocidade, 0, 200, 2);
+	
+
+	
 }
 static float get_time_rtt(){
 	uint ul_previous_time = rtt_read_timer_value(RTT);
@@ -161,27 +207,11 @@ void RTT_Handler(void)
 		pin_toggle(LED_PIO, LED_IDX_MASK);    // BLINK Led
 		f_rtt_alarme = true;                  // flag RTT alarme
 	}
-	//refresh da tela para retirar lixo
-	//ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
-	if(segundos>=59){
-		segundos=0;
-		ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
-		if(minutos>=59){
-			minutos=0;
-			ili9488_draw_filled_rectangle(0, 0, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
-			hora+=1;
-		}
-		else{minutos+=1;}
-	}else{segundos+=1;}
+	tempo_de_corrida();
 	
 		//ili9488_draw_filled_rectangle(70,100, ILI9488_LCD_WIDTH-1, ILI9488_LCD_HEIGHT-1);
-	
-		
-	distancia=2*PI*quantidades_de_rotacoes*raio;
-	// DT NESSE CASO É 1
-	velocidade_angular=2*PI*quantidades_de_rotacoes_dt;
-	velocidade=velocidade_angular*raio*3.6;
-	quantidades_de_rotacoes_dt=0;
+	calcula_variaveis();
+	escreve_lcd();
 	
 }
 
@@ -198,6 +228,13 @@ int main(void) {
 	// Inicializa RTT com IRQ no alarme.
 	f_rtt_alarme = true;
 	
+		sprintf(buffer_distancia,"m : %lf",distancia);
+		sprintf(buffer_velocidade,"(KM/h) : %lf",velocidade);
+		
+		
+		font_draw_text(&calibri_36, buffer_distancia, 50, 50, 1);
+		font_draw_text(&calibri_36, buffer_velocidade, 0, 200, 2);
+	
 	
 
 
@@ -207,27 +244,10 @@ int main(void) {
       uint32_t irqRTTvalue  = 2;
       
       // reinicia RTT para gerar um novo IRQ
-      RTT_init(pllPreScale, irqRTTvalue);         
-      sprintf(buffer_rotacoes,"%d",quantidades_de_rotacoes);
-	  sprintf(buffer_minutos,"%d  :",minutos);
-	  sprintf(buffer_segundos,"%d",segundos);
-	  sprintf(buffer_hora,"%d  :",hora);
-	  sprintf(buffer_distancia,"m : %lf",distancia);
-	  sprintf(buffer_velocidade,"(KM/h) : %lf",velocidade);
-	  
-	  
-	  font_draw_text(&calibri_36, buffer_distancia, 50, 50, 1);
-      font_draw_text(&calibri_36, buffer_hora, 50, 100, 1);
-	  font_draw_text(&calibri_36, buffer_minutos, 150, 100, 1);
-	  font_draw_text(&calibri_36, buffer_segundos, 250, 100, 1);
-      font_draw_text(&calibri_36, buffer_velocidade, 0, 200, 2);
-     /*
-      * caso queira ler o valor atual do RTT, basta usar a funcao
-      *   rtt_read_timer_value()
-      */
-      
+      RTT_init(pllPreScale, irqRTTvalue);            
       f_rtt_alarme = false;
-		
 		}
+		pmc_sleep(SAM_PM_SMODE_SLEEP_WFI);
+
 	}
 }
