@@ -58,7 +58,9 @@ void io_init(void)
 	pio_configure(LED_PIO, PIO_OUTPUT_0, LED_IDX_MASK, PIO_DEFAULT);
 	// Configura PIO para lidar com o pino do bot?o como entrada
 	// com pull-up
-	pio_configure(BUT1_PIO, PIO_INPUT, BUT1_IDX_MASK, PIO_PULLUP);
+	pio_configure(BUT1_PIO, PIO_INPUT, BUT1_IDX_MASK, PIO_PULLUP|PIO_DEBOUNCE);
+	pio_set_debounce_filter(BUT1_PIO,1,20);
+	
 	pio_handler_set(BUT1_PIO,
 	BUT1_PIO_ID,
 	BUT1_IDX_MASK,
@@ -154,13 +156,36 @@ int main(void) {
 	board_init();
 	sysclk_init();	
 	configure_lcd();
+	// Desliga watchdog
+	WDT->WDT_MR = WDT_MR_WDDIS;
+	io_init();
+	
+	// Inicializa RTT com IRQ no alarme.
+	f_rtt_alarme = true;
+	
 	sprintf(buffer,"%d",quantidades_de_rotacoes);
 	font_draw_text(&sourcecodepro_28, "OIMUNDO", 50, 50, 1);
 	font_draw_text(&calibri_36, "Oi Mundo! #$!@", 50, 100, 1);
 	font_draw_text(&arial_72, buffer, 50, 200, 2);
 
 	while(1) {
-		pmc_sleep(SAM_PM_SMODE_SLEEP_WFI);
+		if (f_rtt_alarme){
+      uint16_t pllPreScale = (int) (((float) 32768) / 2.0);
+      uint32_t irqRTTvalue  = 4;
+      
+      // reinicia RTT para gerar um novo IRQ
+      RTT_init(pllPreScale, irqRTTvalue);         
+      sprintf(buffer,"%d",quantidades_de_rotacoes);
+      font_draw_text(&sourcecodepro_28, "OIMUNDO", 50, 50, 1);
+      font_draw_text(&calibri_36, "Oi Mundo! #$!@", 50, 100, 1);
+      font_draw_text(&arial_72, buffer, 50, 200, 2);
+     /*
+      * caso queira ler o valor atual do RTT, basta usar a funcao
+      *   rtt_read_timer_value()
+      */
+      
+      f_rtt_alarme = false;
 		
+		}
 	}
 }
